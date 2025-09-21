@@ -1,0 +1,14 @@
+rules:
+  - id: insecure-subprocess-shell
+    message: Use of subprocess with shell=True is insecure and can lead to command injection.
+    languages: [python]
+    severity: ERROR
+    patterns:
+      - pattern: |
+          subprocess.run(..., shell=True)
+      - pattern-either:
+          - pattern: subprocess.call(..., shell=True)
+          - pattern: subprocess.Popen(..., shell=True)
+    metadata:
+      references: []
+      cwe: "CWE-78"
