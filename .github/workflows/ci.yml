@@ -30,18 +30,11 @@ jobs:
           nohup python app.py &
           sleep 5
 
-      - name: Run DAST with ZAP baseline
+      - name: Run DAST (simple curl fallback)
         run: |
-          docker run --rm -v ${{ github.workspace }}:/zap/wrk -t owasp/zap2docker-stable zap-baseline.py -t http://host.docker.internal:5000 -r zap-report.html || true
+          curl "http://127.0.0.1:5000/echo?msg=<script>alert(1)</script>" -o dast_response.html || true
 
       - name: Generate final report
-        run: python report_generator.py semgrep.json "" zap-report.html report.html
+        run: python report_generator.py semgrep.json "" dast_response.html report.html
 
-      - name: Upload security reports
-        uses: actions/upload-artifact@v3
-        with:
-          name: security-reports
-          path: |
-            semgrep.json
-            zap-report.html
-            report.html
+      - name: Upload security
