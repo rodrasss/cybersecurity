@@ -1,57 +1,47 @@
-name: CI - SAST / SCA / DAST (demo)
-on: [push, pull_request]
+name: CI/CD Security Demo
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
-  security-checks:
+  security-tests:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.9'
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install semgrep snyk
+        run: pip install -r requirements.txt
 
       - name: Run Semgrep (SAST)
-        run: |
-          semgrep --config .semgrep.yml --json --output semgrep.json || true
-        continue-on-error: true
+        run: semgrep --config .semgrep.yml --json > semgrep.json
 
-      - name: Run Snyk (SCA) - requires SNYK_TOKEN secret for full functionality
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      - name: Start Flask app in background
         run: |
-          # If you don't have a SNYK_TOKEN the test may still run but with limited features.
-          snyk test --file=requirements.txt --json-file-output=snyk.json || true
+          nohup python app.py &
+          sleep 5
 
-      - name: Start Flask app in background for DAST
+      - name: Run DAST with ZAP baseline
         run: |
-          python app.py &
-          # wait a bit for the server to be ready
-          sleep 3
+          docker run --rm -v ${{ github.workspace }}:/zap/wrk -t owasp/zap2docker-stable zap-baseline.py -t http://host.docker.internal:5000 -r zap-report.html || true
 
-      - name: Run simple DAST with curl to show XSS evidence (lightweight fallback)
-        run: |
-          # We include a simple check that fetches the endpoint with an XSS payload and saves output
-          curl "http://localhost:5000/echo?msg=<script>alert(1)</script>" -s > dast_response.html || true
+      - name: Generate final report
+        run: python report_generator.py semgrep.json "" zap-report.html report.html
 
-      - name: Generate simple HTML report from semgrep/snyk/dast outputs
-        run: |
-          python3 report_generator.py semgrep.json snyk.json dast_response.html report.html || true
-
-      - name: Upload reports artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload security reports
+        uses: actions/upload-artifact@v3
         with:
           name: security-reports
           path: |
             semgrep.json
-            snyk.json
-            dast_response.html
+            zap-report.html
             report.html
